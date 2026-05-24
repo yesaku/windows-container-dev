@@ -1,0 +1,2 @@
+# windows-container-dev
+Windowsでコンテナ開発環境を構築するためのセットアップサンプル
