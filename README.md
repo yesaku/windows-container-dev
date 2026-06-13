@@ -1,15 +1,26 @@
 # Windows コンテナ開発環境セットアップ
 
-WSL2 + Docker Engine でコンテナ開発環境を構築するためのセットアップスクリプト集です。
+WSL2 + Ubuntu 上にコンテナ / Kubernetes 開発環境を構築するためのセットアップスクリプト集です。
 
 ## 構成
 
+**Docker のみ**
 ```
 Windows 11
 └── WSL2
     └── Ubuntu
         └── Docker Engine
-            └── コンテナ（開発環境）
+```
+
+**Docker + Kubernetes**
+```
+Windows 11
+└── WSL2
+    └── Ubuntu
+        ├── Docker Engine（ビルド・push）
+        └── k3d
+            └── k3s クラスタ（containerd）
+                └── ローカルレジストリ経由で pull
 ```
 
 開発作業はすべて WSL2 Ubuntu 内で完結します。Windows 側には特別なツールのインストールは不要です。
@@ -18,13 +29,15 @@ Windows 11
 
 ```
 windows-container-dev/
-├── ubuntu-on-wsl2/      # WSL2 + Docker Engine によるセットアップ
-│   ├── setup.ps1        # Windows 側のセットアップ（管理者で実行）
-│   ├── setup-wsl.sh     # WSL2 Ubuntu 内の Docker セットアップ
-│   ├── reset-ubuntu.ps1 # Ubuntu を完全削除する
+├── ubuntu-on-wsl2/
+│   ├── setup.ps1          # Windows 側のセットアップ（管理者で実行）
+│   ├── setup-wsl.sh       # WSL2 Ubuntu 内のセットアップ
+│   ├── reset-ubuntu.ps1   # Ubuntu を完全削除する
 │   └── sample/
-|       ├── docker-compose.yml # nginx 動作確認用サンプル
-│       └── html/              # nginx のドキュメントルート
+│       ├── docker-compose.yml  # Docker 動作確認用サンプル
+│       ├── k3d-config.yaml     # k3d クラスタ定義
+│       ├── nginx-pod.yaml      # k8s 動作確認用 Pod + Service
+│       └── html/               # nginx のドキュメントルート
 └── README.md
 ```
 
@@ -56,8 +69,23 @@ Set-ExecutionPolicy Bypass -Scope Process
 |----------|------|
 | WSL2 有効化 | 初回は再起動が入り、ログオン後に自動で再開します |
 | Ubuntu インストール | ユーザー名・パスワードを設定後、`exit` で PowerShell に戻ります |
-| Docker Engine インストール | `setup-wsl.sh` を WSL2 内で自動実行します |
-| WSL2 自動起動 | ログオン時に Ubuntu が自動起動するタスクを登録します |
+| モード選択 | `1. Docker のみ` / `2. Docker + Kubernetes` を選択します |
+| WSL2 内セットアップ | `setup-wsl.sh` を WSL2 内で自動実行します |
+
+**モード 1: Docker のみ**
+
+- Docker Engine・docker compose plugin
+
+**モード 2: Docker + Kubernetes**
+
+- Docker Engine に加えて以下をインストールします
+
+| ツール | 役割 |
+|--------|------|
+| kubectl | Kubernetes 操作 CLI |
+| helm | Kubernetes パッケージ管理 |
+| k3d | ローカル Kubernetes クラスタ管理 |
+| k9s | Kubernetes TUI ダッシュボード |
 
 ### 3. ファイルのエンコーディング
 
@@ -72,7 +100,7 @@ cd <リポジトリのパス>\ubuntu-on-wsl2
 .\reset-ubuntu.ps1
 ```
 
-## 動作確認用サンプル（nginx）
+## 動作確認用サンプル（Docker）
 
 WSL2 に入り、`ubuntu-on-wsl2` フォルダで実行します。
 ※あくまで、`/mnt/c（Windowsファイルシステム）`は動作確認のため使用。このパスでのgit cloneはI/O速度が遅いため非推奨。
@@ -87,4 +115,52 @@ docker compose up -d
 
 ```bash
 docker compose down
+```
+
+## 動作確認用サンプル（Kubernetes）
+
+### 1. クラスタの作成
+
+`sample/` ディレクトリに移動してからクラスタを作成します。`--volume` に `$(pwd)` を使うことで絶対パスを自動解決します。
+
+```bash
+wsl
+cd /mnt/c/<リポジトリのパス>/ubuntu-on-wsl2/sample
+k3d cluster create --config k3d-config.yaml --volume "$(pwd)/html:/mnt/html@all"
+```
+
+作成されるリソース:
+
+| リソース | 内容 |
+|----------|------|
+| サーバーノード | 1台（コントロールプレーン） |
+| エージェントノード | 1台（ワーカー） |
+| ローカルレジストリ | `k3d-sample-registry.localhost:5111` |
+| ポートマッピング | ホスト `8080` → クラスタ LoadBalancer `80` |
+
+### 2. Pod のデプロイ
+
+```bash
+kubectl apply -f nginx-pod.yaml
+kubectl get pod,svc   # Pod が Running になるまで待つ
+```
+
+### 3. 動作確認
+
+```bash
+curl http://localhost:8080
+```
+
+`sample/html/index.html` の内容が返れば成功です。
+
+### 4. k9s でクラスタを確認
+
+```bash
+k9s
+```
+
+### 5. クリーンアップ
+
+```bash
+k3d cluster delete sample-cluster
 ```

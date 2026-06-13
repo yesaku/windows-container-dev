@@ -58,9 +58,22 @@ if (-not $ubuntuReady) {
 }
 
 # ============================================================
-# Step 3: WSL2 内で Docker Engine をセットアップ
+# Step 3: インストールモードの選択
 # ============================================================
-Write-Step "WSL2 Ubuntu 内に Docker Engine をセットアップ"
+Write-Step "インストールモードを選択してください"
+Write-Host "  1. Docker のみ"
+Write-Host "  2. Docker + Kubernetes 開発環境 (k3d / kubectl / helm)"
+do {
+    $choice = Read-Host "    番号を入力 [1/2]"
+} while ($choice -notmatch "^[12]$")
+
+$mode = if ($choice -eq "2") { "k8s" } else { "docker" }
+Write-OK "モード: $mode"
+
+# ============================================================
+# Step 4: WSL2 内でセットアップ
+# ============================================================
+Write-Step "WSL2 Ubuntu 内にセットアップ"
 
 $shellScript = Join-Path $PSScriptRoot "setup-wsl.sh"
 if (-not (Test-Path $shellScript)) {
@@ -71,8 +84,8 @@ if (-not (Test-Path $shellScript)) {
 
 $drive  = $shellScript.Substring(0, 1).ToLower()
 $wslSh  = "/mnt/$drive/" + $shellScript.Substring(3).Replace("\", "/")
-wsl -d Ubuntu bash "$wslSh"
-Write-OK "Docker Engine セットアップ完了"
+wsl -d Ubuntu bash "$wslSh" "$mode"
+Write-OK "セットアップ完了"
 
 Write-Host "    WSL2 を再起動します（systemd 有効化）..."
 wsl --shutdown
@@ -80,7 +93,7 @@ Start-Sleep -Seconds 3
 Write-OK "WSL2 再起動完了"
 
 # ============================================================
-# Step 4: セットアップ自動継続のタスクを削除
+# Step 5: セットアップ自動継続のタスクを削除
 # ============================================================
 Write-Step "セットアップ自動継続のタスクを削除..."
 Unregister-ScheduledTask -TaskName "DevEnvSetup_Continue" -Confirm:$false -ErrorAction SilentlyContinue
@@ -90,13 +103,12 @@ Unregister-ScheduledTask -TaskName "DevEnvSetup_Continue" -Confirm:$false -Error
 # ============================================================
 Write-Host ""
 Write-Host "========================================"  -ForegroundColor Green
-Write-Host "  セットアップ完了!"                      -ForegroundColor Green
+Write-Host "  セットアップ完了! (モード: $mode)"      -ForegroundColor Green
 Write-Host "========================================"  -ForegroundColor Green
 Write-Host @"
 
 次のステップ:
   1. WSL2 に入る: wsl
   2. 任意のフォルダを作成してプロジェクトを clone する
-  3. コンテナを起動する
 
 "@

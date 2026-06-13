@@ -1,0 +1,15 @@
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: sample-cluster
+servers: 1
+agents: 1
+registries:
+  create:
+    name: sample-registry.localhost
+    host: "0.0.0.0"
+    hostPort: "5111"
+ports:
+  - port: 8080:80
+    nodeFilters:
+      - loadbalancer
